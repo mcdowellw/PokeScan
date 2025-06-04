@@ -1,6 +1,6 @@
 """
 Railway Pokemon TCG Scanner - Complete Implementation
-Uses OpenAI for card recognition and local CSV database
+Uses authentic Google Sheets database and OpenAI for card recognition
 """
 import os
 import pandas as pd
@@ -18,94 +18,54 @@ df = None
 scanner_ready = False
 
 def load_database():
-    """Load Pokemon card database from available sources"""
+    """Load Pokemon card database from Google Sheets"""
     global df, scanner_ready
     
     try:
-        # Try Google Sheets API first if credentials are available
+        print("Loading Pokemon card database from Google Sheets...")
+        
+        # Try Google Sheets API with credentials
         creds_json = os.environ.get('GOOGLE_CREDENTIALS_JSON')
         if creds_json:
             try:
                 import gspread
                 from google.oauth2.service_account import Credentials
                 
+                print("Google credentials found, attempting connection...")
                 creds_dict = json.loads(creds_json)
-                credentials = Credentials.from_service_account_info(creds_dict)
+                
+                # Define required scopes for Google Sheets
+                scopes = [
+                    'https://www.googleapis.com/auth/spreadsheets.readonly',
+                    'https://www.googleapis.com/auth/drive.readonly'
+                ]
+                
+                credentials = Credentials.from_service_account_info(creds_dict, scopes=scopes)
                 gc = gspread.authorize(credentials)
                 
+                # Open the CHILLAURA TCG Library spreadsheet
                 sheet = gc.open_by_key("1JicEp6N0vrXVPbE6L1JGTLiNexXyPP5OraHQbDAqcXc")
-                worksheet = sheet.get_worksheet(0)
+                worksheet = sheet.get_worksheet(0)  # First sheet
                 records = worksheet.get_all_records()
-                df = pd.DataFrame(records)
-                print(f"Database loaded from Google Sheets: {len(df)} cards")
-                scanner_ready = True
-                return True
                 
+                if records:
+                    df = pd.DataFrame(records)
+                    print(f"✓ Database loaded from Google Sheets: {len(df)} cards")
+                    scanner_ready = True
+                    return True
+                else:
+                    print("Google Sheets returned empty data")
+                    
             except Exception as e:
-                print(f"Google Sheets failed: {e}")
+                print(f"Google Sheets authentication failed: {e}")
+                print("Verify that GOOGLE_CREDENTIALS_JSON environment variable is set correctly")
+        else:
+            print("GOOGLE_CREDENTIALS_JSON environment variable not found")
         
-        # Try local CSV files
-        csv_files = [
-            'pokemon_cards_fast.csv',
-            'pokemon_sealed_products_database.csv',
-            'pokemon_sealed_products_with_images.csv'
-        ]
-        
-        for csv_file in csv_files:
-            if os.path.exists(csv_file):
-                df = pd.read_csv(csv_file)
-                print(f"Database loaded from {csv_file}: {len(df)} cards")
-                scanner_ready = True
-                return True
-        
-        # Create comprehensive Pokemon database
-        df = pd.DataFrame({
-            'name': [
-                'Pikachu', 'Charizard', 'Blastoise', 'Venusaur', 'Mewtwo',
-                'Mew', 'Lugia', 'Ho-Oh', 'Rayquaza', 'Dialga', 'Palkia',
-                'Alakazam', 'Machamp', 'Gengar', 'Dragonite', 'Snorlax'
-            ],
-            'set': [
-                'Base Set', 'Base Set', 'Base Set', 'Base Set', 'Base Set',
-                'Southern Islands', 'Neo Genesis', 'Neo Revelation', 'EX Deoxys', 'Diamond & Pearl',
-                'Diamond & Pearl', 'Base Set', 'Base Set', 'Base Set', 'Base Set', 'Base Set'
-            ],
-            'number': [
-                '025', '006', '009', '003', '150', 'MEW', '249', '250', '384', '483',
-                '484', '065', '068', '094', '149', '143'
-            ],
-            'rarity': [
-                'Common', 'Rare Holo', 'Rare Holo', 'Rare Holo', 'Rare Holo',
-                'Promo', 'Rare Holo', 'Rare Holo', 'Rare Holo', 'Rare Holo',
-                'Rare Holo', 'Rare Holo', 'Rare Holo', 'Rare Holo', 'Rare Holo', 'Rare Holo'
-            ],
-            'market_price': [
-                '$8.50', '$425.00', '$65.00', '$55.00', '$180.00', '$95.00',
-                '$85.00', '$75.00', '$45.00', '$35.00', '$32.00', '$28.00',
-                '$25.00', '$30.00', '$40.00', '$20.00'
-            ],
-            'tcgplayer_url': [
-                'https://www.tcgplayer.com/product/88/pokemon-base-set-pikachu',
-                'https://www.tcgplayer.com/product/82/pokemon-base-set-charizard',
-                'https://www.tcgplayer.com/product/85/pokemon-base-set-blastoise',
-                'https://www.tcgplayer.com/product/81/pokemon-base-set-venusaur',
-                'https://www.tcgplayer.com/product/89/pokemon-base-set-mewtwo',
-                'https://www.tcgplayer.com/product/90/pokemon-southern-islands-mew',
-                'https://www.tcgplayer.com/product/91/pokemon-neo-genesis-lugia',
-                'https://www.tcgplayer.com/product/92/pokemon-neo-revelation-ho-oh',
-                'https://www.tcgplayer.com/product/93/pokemon-ex-deoxys-rayquaza',
-                'https://www.tcgplayer.com/product/94/pokemon-diamond-pearl-dialga',
-                'https://www.tcgplayer.com/product/95/pokemon-diamond-pearl-palkia',
-                'https://www.tcgplayer.com/product/96/pokemon-base-set-alakazam',
-                'https://www.tcgplayer.com/product/97/pokemon-base-set-machamp',
-                'https://www.tcgplayer.com/product/98/pokemon-base-set-gengar',
-                'https://www.tcgplayer.com/product/99/pokemon-base-set-dragonite',
-                'https://www.tcgplayer.com/product/100/pokemon-base-set-snorlax'
-            ]
-        })
-        print(f"Created sample database with {len(df)} Pokemon cards")
-        scanner_ready = True
-        return True
+        # If Google Sheets fails, notify user that credentials are needed
+        print("Failed to load database: Google Sheets authentication required")
+        print("Please ensure GOOGLE_CREDENTIALS_JSON is properly configured in Railway")
+        return False
         
     except Exception as e:
         print(f"Database loading failed: {e}")
@@ -175,6 +135,7 @@ def status():
         'scanner_ready': scanner_ready,
         'database_size': len(df) if df is not None else 0,
         'openai_available': bool(os.environ.get('OPENAI_API_KEY')),
+        'google_sheets_configured': bool(os.environ.get('GOOGLE_CREDENTIALS_JSON')),
         'status': 'ready' if scanner_ready else 'loading'
     })
 
@@ -186,18 +147,57 @@ def index():
         <html>
         <head>
             <title>Pokemon TCG Scanner</title>
-            <meta http-equiv="refresh" content="3">
+            <meta http-equiv="refresh" content="5">
             <style>
-                body { font-family: Arial; text-align: center; padding: 50px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; }
-                .loading { font-size: 1.2rem; margin-top: 20px; }
+                body { 
+                    font-family: Arial; 
+                    text-align: center; 
+                    padding: 50px; 
+                    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); 
+                    color: white; 
+                    min-height: 100vh;
+                    margin: 0;
+                }
+                .container {
+                    max-width: 600px;
+                    margin: 0 auto;
+                    background: rgba(255,255,255,0.1);
+                    padding: 3rem;
+                    border-radius: 20px;
+                    backdrop-filter: blur(10px);
+                }
+                .loading { 
+                    font-size: 1.2rem; 
+                    margin-top: 20px; 
+                }
+                .status {
+                    background: rgba(255,255,255,0.2);
+                    padding: 1rem;
+                    border-radius: 10px;
+                    margin-top: 2rem;
+                    text-align: left;
+                }
             </style>
         </head>
         <body>
-            <h1>Pokemon TCG Scanner</h1>
-            <div class="loading">Loading database...</div>
+            <div class="container">
+                <h1>Pokemon TCG Scanner</h1>
+                <div class="loading">Loading database from Google Sheets...</div>
+                <div class="status">
+                    <strong>Status:</strong><br>
+                    • Google Sheets: {{ "Configured" if google_sheets else "Needs Configuration" }}<br>
+                    • OpenAI API: {{ "Ready" if openai else "Needs Configuration" }}<br>
+                    • Database: {{ database_size }} cards loaded
+                </div>
+                <p><small>If loading persists, check Railway environment variables</small></p>
+            </div>
         </body>
         </html>
-        ''')
+        ''', 
+        google_sheets=bool(os.environ.get('GOOGLE_CREDENTIALS_JSON')),
+        openai=bool(os.environ.get('OPENAI_API_KEY')),
+        database_size=len(df) if df is not None else 0
+        )
     
     return render_template_string('''
     <!DOCTYPE html>
@@ -349,12 +349,12 @@ def index():
     <body>
         <div class="header">
             <h1>Pokemon TCG Scanner</h1>
-            <p class="subtitle">Advanced Card Recognition with AI Analysis</p>
+            <p class="subtitle">AI-Powered Card Recognition with Live Database</p>
         </div>
         
         <div class="container">
             <div class="stats">
-                <strong>Database:</strong> {{ database_size }} Pokemon cards loaded<br>
+                <strong>Database:</strong> {{ database_size }} Pokemon cards loaded from Google Sheets<br>
                 <strong>AI Recognition:</strong> {{ 'Enabled' if openai_available else 'Configure OpenAI API' }}
             </div>
             
@@ -362,7 +362,7 @@ def index():
                 <div class="upload-area" onclick="document.getElementById('cardImage').click()">
                     <div class="upload-icon">📷</div>
                     <h3>Upload Pokemon Card Image</h3>
-                    <p>AI will analyze your card and find matches in the database</p>
+                    <p>AI will analyze your card and find matches in the live database</p>
                     <input type="file" id="cardImage" accept="image/*" style="display: none;" />
                 </div>
                 
@@ -419,13 +419,15 @@ def index():
                                     </div>
                                     <div class="info-item">
                                         <div class="info-label">Market Price</div>
-                                        <div class="info-value">${card.market_price}</div>
+                                        <div class="info-value">${card.market_price || 'N/A'}</div>
                                     </div>
                                 </div>
                                 ${card.tcgplayer_url ? `<div style="margin-top: 1rem; text-align: center;"><a href="${card.tcgplayer_url}" target="_blank" style="color: #3498db; text-decoration: none; font-weight: bold;">View on TCGPlayer →</a></div>` : ''}
                             </div>
                         `;
                     });
+                } else if (result.error) {
+                    html = `<div class="error">${result.error}</div>`;
                 } else {
                     html = '<div class="error">No matching cards found. Try a different image or angle.</div>';
                 }
@@ -441,12 +443,15 @@ def index():
         </script>
     </body>
     </html>
-    ''', database_size=len(df) if df is not None else 0, openai_available=bool(os.environ.get('OPENAI_API_KEY')))
+    ''', 
+    database_size=len(df) if df is not None else 0, 
+    openai_available=bool(os.environ.get('OPENAI_API_KEY'))
+    )
 
 @app.route('/scan', methods=['POST'])
 def scan_card():
     if not scanner_ready:
-        return jsonify({'error': 'Scanner not ready'}), 503
+        return jsonify({'error': 'Database not loaded. Please check Google Sheets configuration.'}), 503
     
     if 'file' not in request.files:
         return jsonify({'error': 'No file uploaded'}), 400
@@ -469,27 +474,10 @@ def scan_card():
                 if matches:
                     return jsonify({'cards': matches})
         
-        # Return sample cards if no matches or no OpenAI
-        sample_cards = []
-        if df is not None and len(df) > 0:
-            sample = df.head(3)
-            for _, row in sample.iterrows():
-                sample_cards.append({
-                    'name': str(row.get('name', 'Unknown')),
-                    'set': str(row.get('set', 'Unknown Set')),
-                    'number': str(row.get('number', '???')),
-                    'rarity': str(row.get('rarity', 'Unknown')),
-                    'market_price': str(row.get('market_price', 'N/A')),
-                    'tcgplayer_url': str(row.get('tcgplayer_url', '')) if 'tcgplayer_url' in row else ''
-                })
-        
-        return jsonify({
-            'cards': sample_cards,
-            'message': f'Scanner operational - database contains {len(df)} cards'
-        })
+        return jsonify({'error': 'Card analysis requires OpenAI API configuration'})
         
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return jsonify({'error': f'Analysis failed: {str(e)}'}), 500
 
 def search_database(card_info):
     """Search database for card matches"""
@@ -502,15 +490,15 @@ def search_database(card_info):
         
         # Search by name similarity
         for _, row in df.iterrows():
-            db_name = str(row.get('name', '')).lower()
-            if card_name in db_name or db_name in card_name:
+            db_name = str(row.get('Name', '')).lower()
+            if card_name and (card_name in db_name or db_name in card_name):
                 matches.append({
-                    'name': str(row.get('name', 'Unknown')),
-                    'set': str(row.get('set', 'Unknown Set')),
-                    'number': str(row.get('number', '???')),
-                    'rarity': str(row.get('rarity', 'Unknown')),
-                    'market_price': str(row.get('market_price', 'N/A')),
-                    'tcgplayer_url': str(row.get('tcgplayer_url', '')) if 'tcgplayer_url' in row else ''
+                    'name': str(row.get('Name', 'Unknown')),
+                    'set': str(row.get('Set', 'Unknown Set')),
+                    'number': str(row.get('Card Number', '???')),
+                    'rarity': str(row.get('Rarity', 'Unknown')),
+                    'market_price': str(row.get('Market Price', 'N/A')),
+                    'tcgplayer_url': str(row.get('TCGPlayer Link', '')) if 'TCGPlayer Link' in row else ''
                 })
                 if len(matches) >= 3:
                     break
@@ -523,6 +511,9 @@ def search_database(card_info):
 
 if __name__ == '__main__':
     print("Starting Pokemon TCG Scanner...")
-    load_database()
+    success = load_database()
+    if not success:
+        print("Warning: Database not loaded. Check environment configuration.")
+    
     port = int(os.environ.get('PORT', 5000))
     app.run(host='0.0.0.0', port=port, debug=False)
