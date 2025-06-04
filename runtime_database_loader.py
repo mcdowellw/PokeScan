@@ -5,6 +5,8 @@ Downloads the Pokemon card database at startup instead of including in deploymen
 import os
 import requests
 import pandas as pd
+import json
+import tempfile
 from pathlib import Path
 
 class RuntimeDatabaseLoader:
@@ -13,13 +15,43 @@ class RuntimeDatabaseLoader:
         self.sheets_url = "https://docs.google.com/spreadsheets/d/1JicEp6N0vrXVPbE6L1JGTLiNexXyPP5OraHQbDAqcXc/export?format=csv&gid=0"
         self.df = None
     
+    def setup_google_credentials(self):
+        """Setup Google credentials from environment variable"""
+        try:
+            # Check if credentials are provided as environment variable
+            creds_json = os.environ.get('GOOGLE_CREDENTIALS_JSON')
+            if creds_json:
+                # Write credentials to temporary file
+                with tempfile.NamedTemporaryFile(mode='w', suffix='.json', delete=False) as f:
+                    f.write(creds_json)
+                    os.environ['GOOGLE_APPLICATION_CREDENTIALS'] = f.name
+                return True
+            return False
+        except Exception as e:
+            print(f"Failed to setup Google credentials: {e}")
+            return False
+    
     def download_database(self):
         """Load database directly from Google Sheets"""
         try:
             print("Loading Pokemon card database from Google Sheets...")
-            self.df = pd.read_csv(self.sheets_url)
-            print(f"Database loaded successfully - {len(self.df)} cards")
-            return True
+            
+            # Try with credentials first
+            self.setup_google_credentials()
+            
+            # Attempt to load from Google Sheets
+            headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'}
+            response = requests.get(self.sheets_url, headers=headers)
+            
+            if response.status_code == 200:
+                from io import StringIO
+                self.df = pd.read_csv(StringIO(response.text))
+                print(f"Database loaded successfully - {len(self.df)} cards")
+                return True
+            else:
+                print(f"Failed to load database: HTTP {response.status_code}")
+                return False
+                
         except Exception as e:
             print(f"Failed to load database: {e}")
             return False
