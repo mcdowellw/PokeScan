@@ -36,20 +36,46 @@ class RuntimeDatabaseLoader:
         try:
             print("Loading Pokemon card database from Google Sheets...")
             
-            # Try with credentials first
-            self.setup_google_credentials()
+            # Try with Google Sheets API if credentials are available
+            creds_json = os.environ.get('GOOGLE_CREDENTIALS_JSON')
+            if creds_json:
+                try:
+                    import gspread
+                    from google.oauth2.service_account import Credentials
+                    import json
+                    
+                    # Parse credentials
+                    creds_dict = json.loads(creds_json)
+                    credentials = Credentials.from_service_account_info(creds_dict)
+                    gc = gspread.authorize(credentials)
+                    
+                    # Open the spreadsheet
+                    sheet = gc.open_by_key("1JicEp6N0vrXVPbE6L1JGTLiNexXyPP5OraHQbDAqcXc")
+                    worksheet = sheet.get_worksheet(0)
+                    
+                    # Get all records
+                    records = worksheet.get_all_records()
+                    self.df = pd.DataFrame(records)
+                    print(f"Database loaded successfully via API - {len(self.df)} cards")
+                    return True
+                    
+                except Exception as api_error:
+                    print(f"Google Sheets API failed: {api_error}")
+                    # Fall back to direct CSV access
             
-            # Attempt to load from Google Sheets
+            # Fallback: Try direct CSV export (requires public access)
+            print("Trying direct CSV access...")
             headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'}
             response = requests.get(self.sheets_url, headers=headers)
             
-            if response.status_code == 200:
+            if response.status_code == 200 and 'DOCTYPE html' not in response.text:
                 from io import StringIO
                 self.df = pd.read_csv(StringIO(response.text))
-                print(f"Database loaded successfully - {len(self.df)} cards")
+                print(f"Database loaded successfully via CSV - {len(self.df)} cards")
                 return True
             else:
                 print(f"Failed to load database: HTTP {response.status_code}")
+                print("Note: Google Sheets appears to be private. Ensure GOOGLE_CREDENTIALS_JSON is properly set.")
                 return False
                 
         except Exception as e:
